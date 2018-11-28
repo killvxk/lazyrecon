@@ -21,6 +21,10 @@ while getopts "sd:" o; do
             curlflag=-k
             port=443
             ;;
+        r)
+            file=${OPTARG}
+            ;;
+            
         *)
             usage
             ;;
@@ -28,12 +32,10 @@ while getopts "sd:" o; do
 done
 shift $((OPTIND-1))
 
-if [ -z "${domain}" ] ; then
-    usage
+if [ -z "${domain}" ] && [ -z "${file}"  ] ; then
+   usage
 fi
 
-echo "domain = ${domain}"
-echo "scheme = ${urlscheme}"
 
 discovery(){
   hostalive $domain
@@ -112,19 +114,22 @@ dirsearcher(){
 }
 crtsh(){
  ~/massdns/scripts/ct.py $domain | ~/massdns/bin/massdns -r ~/massdns/lists/resolvers.txt -t A -q -o S -w  ./$domain/$foldername/crtsh.txt
+ cat ./$domain/$foldername/$domain.txt | ~/massdns/bin/massdns -r ~/massdns/lists/resolvers.txt -t A -q -o S -w  ./$domain/$foldername/domaintemp.txt
 }
 mass(){
  ~/massdns/scripts/subbrute.py ./all.txt $domain | ~/massdns/bin/massdns -r ~/massdns/lists/resolvers.txt -t A -q -o S | grep -v 142.54.173.92 > ./$domain/$foldername/mass.txt
 }
 nsrecords(){
-                echo "${green}Started dns records check...${reset}"
+                
                 echo "Checking http://crt.sh"
                 crtsh $domain > /dev/null
                 echo "Starting Massdns Subdomain discovery this may take a while"
                 mass $domain > /dev/null
                 echo "Massdns finished..."
+                echo "${green}Started dns records check...${reset}"
                 echo "Looking into CNAME Records..."
                 cat ./$domain/$foldername/mass.txt >> ./$domain/$foldername/temp.txt
+                cat ./$domain/$foldername/domaintemp.txt >> ./$domain/$foldername/temp.txt
                 cat ./$domain/$foldername/crtsh.txt >> ./$domain/$foldername/temp.txt
                 cat ./$domain/$foldername/temp.txt | awk '{print $3}' | sort -u | while read line; do
                 wildcard=$(cat ./$domain/$foldername/temp.txt | grep -m 1 $line)
@@ -294,7 +299,7 @@ master_report()
 
   echo "</html>" >> ./$domain/$foldername/master_report.html
 
-  echo "${green}Scan for $domain finished successfully${reset}"
+
 }
 
 logo(){
@@ -310,7 +315,12 @@ logo(){
 
 ${reset}                                                      "
 }
+cleantemp(){
 
+    rm ./$domain/$foldername/temp.txt
+    rm ./$domain/$foldername/domaintemp.txt
+    rm ./$domain/$foldername/cleantemp.txt
+}
 main(){
   clear
   logo
@@ -331,6 +341,7 @@ main(){
   touch ./$domain/$foldername/pos.txt
   touch ./$domain/$foldername/alldomains.txt
   touch ./$domain/$foldername/temp.txt
+  touch ./$domain/$foldername/domaintemp.txt
   touch ./$domain/$foldername/ipaddress.txt
   touch ./$domain/$foldername/cleantemp.txt
   touch ./$domain/$foldername/unreachable.html
@@ -339,16 +350,19 @@ main(){
   rm -rf ~/tools/dirsearch/reports/*.$domain
   recon $domain
   master_report $domain
-  rm ./$domain/$foldername/temp.txt
-  rm ./$domain/$foldername/cleantemp.txt
-
-
-
-
-
+  echo "${green}Scan for $domain finished successfully${reset}"
+  cleatemp $domain
 }
-logo
 
 path=$(pwd)
 foldername=recon-$(date +"%Y-%m-%d")
-main $domain
+if [ -z "${domain}" ] && [ -n "${file}" ] ; then
+   cat file | while read line; do
+   domain = $line
+   main $domain
+   done
+elif [ -n "${domain}" ] && [ -z "${file}" ] ; then
+   main $domain   
+fi
+
+
